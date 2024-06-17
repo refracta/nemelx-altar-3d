@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <title>It's all in the cards!</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #instructions {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1;
+            background: rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+        #download-link {
+            position: absolute;
+            top: 0;
+            right: 0;
+            padding: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0,0,0,0.5);
+            z-index: 2;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div id="instructions">Click to play (WASD/Space/Shift)</div>
+<div id="download-link">
+    <a href="nemelex.fbx" download="nemelex.fbx" style="color: white; text-decoration: none;">
+        Download Model (CC0 License)
+    </a>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+<script>
+    // Set up scene, camera, and renderer
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // OrbitControls for initial camera control
+    const orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+    orbitControls.enableDamping = true;
+    orbitControls.dampingFactor = 0.25;
+    orbitControls.screenSpacePanning = false;
+    orbitControls.maxPolarAngle = Math.PI / 2;
+
+    // PointerLockControls for FPS camera control
+    const pointerLockControls = new THREE.PointerLockControls(camera, document.body);
+
+    // Instructions
+    const instructions = document.getElementById('instructions');
+    instructions.addEventListener('click', () => {
+        pointerLockControls.lock();
+    });
+
+    pointerLockControls.addEventListener('lock', () => {
+        instructions.style.display = 'none';
+        orbitControls.enabled = false;  // Disable OrbitControls when PointerLock is active
+    });
+
+    pointerLockControls.addEventListener('unlock', () => {
+        instructions.style.display = '';
+        orbitControls.enabled = true;  // Enable OrbitControls when PointerLock is inactive
+
+        // Sync OrbitControls target with current camera position
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        const distance = 10; // Adjust as necessary
+        orbitControls.target.copy(camera.position).add(direction.multiplyScalar(distance));
+        orbitControls.update();
+    });
+
+    scene.add(pointerLockControls.getObject());
+
+    // Load the FBX model
+    const loader = new THREE.FBXLoader();
+    let model;
+    loader.load('nemelex.fbx', (fbx) => {
+        model = fbx;
+        model.position.y -= 8; // Move the model down
+        model.rotation.y = Math.PI;
+        scene.add(model);
+    });
+
+    // Set up lighting
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(1, 1, 1).normalize();
+    scene.add(directionalLight);
+
+    const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 1);
+    scene.add(hemisphereLight);
+
+    // Position the camera
+    camera.position.set(0, 0, 44.21340966186337); // Set initial camera position
+
+    // Keyboard controls
+    const keyboard = {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        up: false,
+        down: false
+    };
+    window.addEventListener('keydown', (event) => {
+        switch(event.code) {
+            case 'KeyW':
+                keyboard.forward = true;
+                break;
+            case 'KeyS':
+                keyboard.backward = true;
+                break;
+            case 'KeyA':
+                keyboard.left = true;
+                break;
+            case 'KeyD':
+                keyboard.right = true;
+                break;
+            case 'Space':
+                keyboard.up = true;
+                break;
+            case 'ShiftLeft':
+            case 'ShiftRight':
+                keyboard.down = true;
+                break;
+        }
+    });
+    window.addEventListener('keyup', (event) => {
+        switch(event.code) {
+            case 'KeyW':
+                keyboard.forward = false;
+                break;
+            case 'KeyS':
+                keyboard.backward = false;
+                break;
+            case 'KeyA':
+                keyboard.left = false;
+                break;
+            case 'KeyD':
+                keyboard.right = false;
+                break;
+            case 'Space':
+                keyboard.up = false;
+                break;
+            case 'ShiftLeft':
+            case 'ShiftRight':
+                keyboard.down = false;
+                break;
+        }
+    });
+
+    // Rotation control variables
+    let rotationSpeed = Math.PI * 2; // One full rotation per second
+    const maxSpeed = Math.PI * 2; // One full rotation per second
+    const minSpeed = 0.001;
+    const decayRate = 0.95;
+    let accelerating = true;
+    let timer = 0;
+    const rotationInterval = 2000; // Rotate every 2 seconds
+
+    function processKeyboard() {
+        const speed = 0.3;
+
+        if (pointerLockControls.isLocked) {
+            if (keyboard.forward) {
+                pointerLockControls.moveForward(speed);
+            }
+            if (keyboard.backward) {
+                pointerLockControls.moveForward(-speed);
+            }
+            if (keyboard.left) {
+                pointerLockControls.moveRight(-speed);
+            }
+            if (keyboard.right) {
+                pointerLockControls.moveRight(speed);
+            }
+            if (keyboard.up) {
+                camera.position.y += speed;
+            }
+            if (keyboard.down) {
+                camera.position.y -= speed;
+            }
+            console.log(`Camera position: x=${camera.position.x}, y=${camera.position.y}, z=${camera.position.z}`);
+        }
+    }
+    function processRotation(delta) {
+        if (model) {
+            model.rotation.y += rotationSpeed * delta;
+
+            if (accelerating) {
+                rotationSpeed *= 1.05;
+                if (rotationSpeed >= maxSpeed) {
+                    accelerating = false;
+                }
+            } else {
+                rotationSpeed *= decayRate;
+                if (rotationSpeed <= minSpeed) {
+                    rotationSpeed = minSpeed; // Ensure it doesn't go below minSpeed
+                    accelerating = true; // Start accelerating again
+                }
+            }
+        }
+    }
+
+    // Animation loop
+    let previousTime = 0;
+    function animate(currentTime) {
+        requestAnimationFrame(animate);
+        const delta = (currentTime - previousTime) / 1000; // Convert to seconds
+        previousTime = currentTime;
+
+        timer += delta * 1000; // Convert to milliseconds
+        if (timer >= rotationInterval) {
+            timer = 0;
+            rotationSpeed = maxSpeed; // Reset speed to max
+            accelerating = false;
+        }
+
+        processKeyboard();
+        processRotation(delta);
+        if (!pointerLockControls.isLocked) {
+            orbitControls.update(); // Always update orbit controls when not locked
+        }
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
