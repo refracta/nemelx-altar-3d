@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Orb of Destruction – Grid Demo (iood_act v14.1)</title>
+<style>
+ :root{ --bg:#111; --fg:#eee; --grid:#333; --wall:#555; }
+ html,body{height:100%;margin:0}
+ body{display:flex;flex-direction:column;align-items:center;background:var(--bg);color:var(--fg);font-family:sans-serif}
+ h1{margin:16px 0 2px}
+ #instructions{font-size:.9rem;opacity:.85;margin-bottom:8px;max-width:780px;text-align:center}
+ canvas{background:#222;border:1px solid #444;touch-action:none}
+</style>
+</head>
+<body>
+<h1>Orb of Destruction (Grid)</h1>
+<div id="instructions">
+ 좌클릭 → 오브(<span style="color:#ff66ff">분홍→보라</span>) 발사. 우클릭 → <span style="color:#ff0000">몬스터</span>(HP 2) ↔ 회색 벽 토글.<br>
+ 마우스 <span style="color:#ffff00">호버 타일</span>, <span style="color:#ffff99">예상 궤적</span> 표시.
+</div>
+<canvas id="arena" width="1600" height="800"></canvas>
+<script>
+(function(){"use strict";
+// --- DOM references first to avoid ReferenceError ---
+const canvas = document.getElementById("arena"), ctx = canvas.getContext("2d");
+// --- CONSTANTS ------------------------------------
+const SIZE = 32;
+const COLS = canvas.width  / SIZE; // 25 tiles
+const ROWS = canvas.height / SIZE; // 20 tiles
+const TICK_MS = 35;               // ≈14 FPS
+const SPEED   = 1.0;              // 1 tile per tick
+const COL_PLAYER="#00ff00", COL_MONSTER="#ff0000", COL_WALL="#555555";
+const COL_HOVER="#ffff00", COL_PATH="#ffff99";
+const ORB_START="#ff66ff", ORB_END="#8000ff", PARTICLE_COL="#ff4444";
+// --- GAME STATE -----------------------------------
+const player={c:Math.floor(COLS/2), r:Math.floor(ROWS/2)};
+const orbs=[], monsters=[], walls=[], particles=[];
+let hover={c:-1,r:-1}, pathCache=[], pathDirty=true;
+// --- UTIL FUNCTIONS -------------------------------
+function norm(v){const d=Math.hypot(v.x,v.y)||1; v.x/=d; v.y/=d;}
+function inFront(vx,vy,dx,dy,a){return (dx-vx)**2+(dy-vy)**2<=a*a;}
+function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return dx*dx+dy*dy;}
+const monsterAt =(c,r)=>monsters.find(m=>m.c===c&&m.r===r);
+const wallAt    =(c,r)=>walls.find(w=>w.c===c&&w.r===r);
+const center    =(c,r)=>({x:c*SIZE+SIZE/2,y:r*SIZE+SIZE/2});
+function spawnParticles(c,r){const {x,y}=center(c,r);for(let i=0;i<20;i++){const a=Math.random()*6.283,s=Math.random()*4+2;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1});}}
+function updParticles(){for(let i=particles.length-1;i>=0;--i){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.9;p.vy*=0.9;p.life-=0.08;if(p.life<=0)particles.splice(i,1);}}
+function drawParticles(){ctx.fillStyle=PARTICLE_COL;for(const p of particles){ctx.globalAlpha=p.life;ctx.beginPath();ctx.arc(p.x,p.y,3,0,6.283);ctx.fill();}ctx.globalAlpha=1;}
+// --- ORB CLASS ------------------------------------
+class Orb{
+  constructor(tC,tR,sim=false){this.x=player.c;this.y=player.r;const d={x:tC-player.c,y:tR-player.r};norm(d);this.vx=d.x;this.vy=d.y;this.age=0;this.dead=false;this.sim=sim;}
+  acquire(){let best=null,bestD2=25;for(const m of monsters){const d2=dist2(this.x,this.y,m.c,m.r);if(d2<bestD2){best=m;bestD2=d2;}}return best;}
+  step(){const tgt=this.acquire();if(tgt){const tv={x:tgt.c-this.x,y:tgt.r-this.y};norm(tv);if(!inFront(this.vx,this.vy,tv.x,tv.y,0.3)){const cross=tv.y*this.vx-tv.x*this.vy;const ax=cross<0?this.vy:-this.vy,ay=cross<0?-this.vx:this.vx;this.vx+=ax*0.3;this.vy+=ay*0.3;const len=Math.hypot(this.vx,this.vy)||1; this.vx/=len; this.vy/=len;} }
+    this.x+=this.vx*SPEED;this.y+=this.vy*SPEED;this.age++;
+    const tc=Math.floor(this.x),tr=Math.floor(this.y);
+    if(this.sim)return; // prediction mode: skip collisions
+    if(wallAt(tc,tr)){spawnParticles(tc,tr);this.dead=true;return;}
+    const m=monsterAt(tc,tr);if(m){m.hp--;spawnParticles(tc,tr);if(m.hp<=0)monsters.splice(monsters.indexOf(m),1);this.dead=true;}
+  }
+  off(){return this.x<0||this.x>=COLS||this.y<0||this.y>=ROWS||this.age>1000||this.dead;}
+  draw(){const {x,y}=center(Math.floor(this.x),Math.floor(this.y));const g=ctx.createRadialGradient(x,y,4,x,y,SIZE/2-4);g.addColorStop(0,ORB_START);g.addColorStop(1,ORB_END);ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,SIZE/2-4,0,6.283);ctx.fill();}
+}
+// --- PREDICTION -----------------------------------
+function computePath(tC,tR){const temp=new Orb(tC,tR,true),tiles=[];for(let i=0;i<200&&!temp.off();i++){tiles.push({c:Math.floor(temp.x),r:Math.floor(temp.y)});temp.step();}return tiles;}
+// --- INPUT HANDLERS -------------------------------
+canvas.addEventListener("click",e=>{if(e.button)return;const rect=canvas.getBoundingClientRect();const tc=Math.floor((e.clientX-rect.left)/SIZE),tr=Math.floor((e.clientY-rect.top)/SIZE);orbs.push(new Orb(tc,tr));});
+canvas.addEventListener("contextmenu",e=>{e.preventDefault();const rect=canvas.getBoundingClientRect();const c=Math.floor((e.clientX-rect.left)/SIZE),r=Math.floor((e.clientY-rect.top)/SIZE);const w=wallAt(c,r),m=monsterAt(c,r);if(w){walls.splice(walls.indexOf(w),1);}else if(m){monsters.splice(monsters.indexOf(m),1);walls.push({c,r});}else{monsters.push({c,r,hp:2});}pathDirty=true;});
+canvas.addEventListener("mousemove",e=>{const rect=canvas.getBoundingClientRect();const c=Math.floor((e.clientX-rect.left)/SIZE),r=Math.floor((e.clientY-rect.top)/SIZE);if(c!==hover.c||r!==hover.r){hover={c,r};pathDirty=true;}});
+// --- RENDER HELPERS -------------------------------
+function drawGrid(){ctx.strokeStyle="var(--grid)";ctx.lineWidth=1;for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*SIZE,0);ctx.lineTo(c*SIZE,ROWS*SIZE);ctx.stroke();}for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*SIZE);ctx.lineTo(COLS*SIZE,r*SIZE);ctx.stroke();}}
+function drawMonsters(){for(const m of monsters){const {x,y}=center(m.c,m.r);ctx.fillStyle=COL_MONSTER;ctx.beginPath();ctx.arc(x,y,10,0,6.283);ctx.fill();ctx.fillStyle="#fff";ctx.font="12px sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(m.hp,x,y);}}
+function drawWalls(){for(const w of walls){ctx.fillStyle=COL_WALL;ctx.fillRect(w.c*SIZE+2,w.r*SIZE+2,SIZE-4,SIZE-4);}}
+function drawHover(){if(hover.c<0)return;ctx.fillStyle=COL_HOVER;ctx.globalAlpha=0.3;ctx.fillRect(hover.c*SIZE,hover.r*SIZE,SIZE,SIZE);ctx.globalAlpha=1;}
+function drawPrediction(){ctx.fillStyle=COL_PATH;ctx.globalAlpha=0.25;for(const t of pathCache){ctx.fillRect(t.c*SIZE+8,t.r*SIZE+8,SIZE-16,SIZE-16);}ctx.globalAlpha=1;}
+// --- GAME LOOP ------------------------------------
+function gameTick(){for(let i=0;i<orbs.length;i++){const o=orbs[i];o.step();if(o.off()){orbs.splice(i,1);i--;}}updParticles();if(pathDirty&&hover.c>=0&&hover.c<COLS&&hover.r>=0&&hover.r<ROWS){pathCache=computePath(hover.c,hover.r);pathDirty=false;}ctx.clearRect(0,0,canvas.width,canvas.height);drawGrid();drawWalls();drawPrediction();drawHover();const p=center(player.c,player.r);ctx.fillStyle=COL_PLAYER;ctx.beginPath();ctx.arc(p.x,p.y,10,0,6.283);ctx.fill();drawMonsters();drawParticles();for(const o of orbs)o.draw();setTimeout(gameTick,TICK_MS);} // kick off
+setTimeout(gameTick,TICK_MS);
+})();
+</script>
+</body>
+</html>
