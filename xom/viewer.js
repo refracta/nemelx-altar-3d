@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
 import {PointerLockControls} from './vendor/PointerLockControls.js';
-import {createXom, expressions} from './model.js';
+import {createXom, expressions, modelUrl} from './model.js?v=2';
 
 const translations = {
     en: {
@@ -110,11 +110,11 @@ try {
     orbit.autoRotateSpeed = 0.75;
     const flight = new PointerLockControls(camera, renderer.domElement);
     document.getElementById('fly').hidden = !renderer.domElement.requestPointerLock;
-    const {model, setExpression} = createXom();
+    const {model, setExpression} = await createXom();
     scene.add(model);
 
     scene.add(new THREE.HemisphereLight('#ece5fc', '#24202d', 1.2));
-    const key = new THREE.DirectionalLight('#fff1dd', 2.4);
+    const key = new THREE.DirectionalLight('#f4f4fa', 2.4);
     key.position.set(-3.5, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -139,7 +139,7 @@ try {
 
     function resetCamera() {
         if (document.pointerLockElement) flight.unlock();
-        camera.position.set(4.1, 3.2, 9.7);
+        camera.position.set(1.1, 2.6, 9.2);
         orbit.target.set(0, 1.80, 0);
         orbit.update();
     }
@@ -214,20 +214,10 @@ try {
     });
 
     async function exportModel() {
-        const {GLTFExporter} = await import('./vendor/exporters/GLTFExporter.js');
-        const clone = model.clone(true);
-        clone.children.forEach(child => {
-            if (child.morphTargetInfluences) {
-                child.morphTargetInfluences.fill(0);
-                child.morphTargetInfluences[0] = 1;
-            }
-        });
-        // GLB stores all eight shape keys and the face animation; plinth uses Xom purple.
-        clone.children.filter(child => child.name.startsWith('Plinth')).forEach(child => {
-            child.material = child.material.clone();
-            child.material.color.set('#845fbf');
-        });
-        const result = await new GLTFExporter().parseAsync(clone, {binary: true, animations: model.animations});
+        // Download the complete animation, independent of the currently visible face.
+        const response = await fetch(modelUrl);
+        if (!response.ok) throw new Error(`Model download failed (${response.status})`);
+        const result = await response.arrayBuffer();
         const blobUrl = URL.createObjectURL(new Blob([result], {type: 'model/gltf-binary'}));
         const link = document.createElement('a');
         link.href = blobUrl;
@@ -252,16 +242,16 @@ try {
         }
     });
     let previousTime;
+    document.addEventListener('visibilitychange', () => { previousTime = undefined; });
     function render(now) {
-        const delta = previousTime === undefined ? 0 : Math.min((now - previousTime) / 1000, 0.05);
+        const elapsed = previousTime === undefined ? 0 : Math.max(0, (now - previousTime) / 1000);
+        const delta = Math.min(elapsed, 0.05);
         previousTime = now;
         if (document.hidden) return;
         if (autoplay) {
-            cycleTime = (cycleTime + delta) % 28;
+            cycleTime = (cycleTime + elapsed) % 28;
             const index = Math.floor(cycleTime / 3.5);
-            const progress = Math.max(0, (cycleTime % 3.5 - 2.7) / 0.8);
-            const mix = progress * progress * (3 - 2 * progress);
-            setExpression(index, (index + 1) % 8, mix);
+            setExpression(index);
             if (activeFace !== index) updateFaceLabel(index);
         }
         if (flight.isLocked) {
@@ -277,13 +267,13 @@ try {
     }
     renderer.setAnimationLoop(render);
     loading.hidden = true;
-    // Useful for reproducible screenshots and offline GLB export, without a build step.
+    // Useful for reproducible browser checks and screenshots.
     window.xomViewer = {model, scene, camera, renderer, orbit, selectFace, exportModel, setAutoplay};
 } catch (error) {
     viewerFailed = true;
     loading.textContent = translations[locale].error;
     const link = document.createElement('a');
-    link.href = 'xom.glb';
+    link.href = modelUrl.href;
     link.dataset.i18n = 'download';
     link.textContent = translations[locale].download;
     document.getElementById('download').replaceWith(link);
