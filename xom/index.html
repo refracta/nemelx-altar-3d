@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#15111c">
+    <meta name="description" content="Eight changing faces of Xom. An interactive 3D altar inspired by Dungeon Crawl Stone Soup.">
+    <title>Xom · CNC Altars</title>
+    <link rel="icon" href="reference/xom0.png">
+    <link rel="stylesheet" href="viewer.css">
+    <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head>
+<body>
+    <header>
+        <a class="back" href="../" data-i18n="back">← Nemelex altar</a>
+        <span class="brand">CNC <span>/</span> ALTARS</span>
+        <label class="language"><span class="sr-only" data-i18n="language">Language</span>
+            <select id="language"><option value="en">English</option><option value="ko">한국어</option></select>
+        </label>
+    </header>
+    <main>
+        <section id="stage" aria-label="3D Xom altar">
+            <div class="title"><p data-i18n="epithet">THE GOD OF CHAOS</p><h1>Xom<span>.</span></h1></div>
+            <div class="current"><span id="face-number">01 / 08</span><h2 id="face-name">Grin</h2></div>
+            <div id="viewport" role="group" tabindex="0" aria-label="Drag to orbit, scroll to zoom. Keys 1–8 select a face."></div>
+            <p id="loading" role="status" data-i18n="loading">Summoning Xom…</p>
+            <p id="hint" data-i18n="hint">Drag to orbit · Scroll to zoom · 1–8 to change face</p>
+            <div class="toolbar">
+                <button id="autoplay" type="button" aria-pressed="true" data-i18n="autoplay">Cycle faces</button>
+                <button id="rotate" type="button" aria-pressed="false" data-i18n="rotate">Rotate</button>
+                <button id="reset" type="button" data-i18n="reset">Reset view</button>
+                <button id="fly" type="button" data-i18n="fly">Free flight</button>
+            </div>
+        </section>
+        <section class="expressions" aria-label="Expressions">
+            <div class="section-label"><span data-i18n="faces">THE MANY FACES OF XOM</span><span data-i18n="source">From eight original Crawl tiles</span></div>
+            <div id="faces"></div>
+        </section>
+    </main>
+    <footer>
+        <span data-i18n="sculpture">An ever-changing stone altar.</span>
+        <nav aria-label="Model resources">
+            <a href="https://crawl.nemelex.cards" data-i18n="play">Play Crawl ↗</a>
+            <a href="https://github.com/refracta/nemelx-altar-3d/tree/main/xom" data-i18n="credits">Source & credits ↗</a>
+            <button id="download" type="button" data-i18n="download">Download animated GLB ↓</button>
+        </nav>
+    </footer>
+    <noscript>This viewer needs JavaScript. <a href="xom.glb">Download the Xom model</a>.</noscript>
+    <script type="module" src="viewer.js"></script>
+</body>
+</html>
